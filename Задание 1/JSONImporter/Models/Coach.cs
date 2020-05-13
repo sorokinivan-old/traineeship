@@ -1,11 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace JSONImporter
 {
     public class Coach
     {
+        [Key]
         public int personId { get; set; }
         public string familyName { get; set; }
         public string firstName { get; set; }

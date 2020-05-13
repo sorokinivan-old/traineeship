@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Text;
 
 namespace JSONImporter
 {
     public class Detail
     {
+        [Key]
+        public int detailId { get; set; }
         public string teamName { get; set; }
         public string teamNameInternational { get; set; }
         public string teamId { get; set; }

@@ -8,12 +8,16 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.Serialization.Json;
 using System.Text.Json;
+using JSONImporter.Models;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
 
 namespace JSONImporter
 {
-    [MinColumn,MaxColumn]
+    [MinColumn, MaxColumn]
     public class Program
     {
+
         public static string path = @"team.json";// path to the json file
         private static Logger logger = LogManager.GetCurrentClassLogger();
         private static List<Team> jsonList = new List<Team>();//list to import data from the json file
@@ -26,7 +30,7 @@ namespace JSONImporter
             {
                 while (true)
                 {
-                    Console.WriteLine("1 - Создать JSON файл, 2 - импортировать JSON файл, 3 - провести измерение производительности");
+                    Console.WriteLine("1 - Создать JSON файл, 2 - импортировать JSON файл, 3 - провести измерение производительности, 4 - импорт в БД");
                     var a = Convert.ToInt32(Console.ReadLine());
                     switch (a)
                     {
@@ -43,6 +47,9 @@ namespace JSONImporter
                         case 3:
                             BenchmarkRunner.Run<Program>();
                             break;
+                        case 4:
+                            method.SaveInDB();
+                            break;
                     }
                 }
             }
@@ -54,6 +61,56 @@ namespace JSONImporter
 
         }
 
+        public void SaveInDB()
+        {
+            try
+            {
+                DBContext db = new DBContext();
+                jsonList = method.ImportJson();
+                var players = new List<int>();
+                var teams = new TeamsDBModel();
+                var teamsList = new List<int>();
+                foreach (var list in jsonList)
+                {
+                    foreach (var inList in list.teams)
+                    {
+                        db.Coach.Add(inList.coach);
+
+                        db.Details.Add(inList.detail);
+                        db.SaveChanges();
+
+                        foreach (var player in inList.players)
+                        {
+                            players.Add(player.personId);
+                            db.Player.Add(player);
+                        }
+                        teams = new TeamsDBModel
+                        {
+                            teamNumber = inList.teamNumber,
+                            detail = inList.detail.detailId,
+                            players = players.ToArray(),
+                            coach = inList.coach.personId
+                        };
+                        teamsList.Add(teams.teamNumber);
+                        db.Teams.Add(teams);
+
+                    }
+                    var team = new TeamDBModel
+                    {
+                        messageId = list.messageId,
+                        teams = teamsList.ToArray()
+                    };
+                    db.Team.Add(team);
+                    db.SaveChanges();
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                logger.Error("При импорте в БД вылетело исключение " + e);
+            }
+            
+        }
 
         [Benchmark]
         public bool CreateJson() //method that generates the json file
@@ -61,7 +118,7 @@ namespace JSONImporter
             try
             {
                 var players = new List<Player>();
-                for (int i = 0; i < 15000; i++)
+                for (int i = 1; i <= 15000; i++)
                 {
                     var player = new Player
                     {
@@ -95,6 +152,7 @@ namespace JSONImporter
 
                 var detail = new Detail
                 {
+                    detailId = 2,
                     teamName = "Southern Knights",
                     teamCode = "SKN",
                     teamNickname = "Knights",
@@ -102,7 +160,7 @@ namespace JSONImporter
                 };
                 var tempTeams = new Teams
                 {
-                    teamNumber = "1",
+                    teamNumber = 1,
                     detail = detail,
                     players = players,
                     coach = coach
@@ -141,6 +199,7 @@ namespace JSONImporter
                 //foreach(dynamic f in jsonList)
                 //Console.WriteLine(f);
                 logger.Info("Json файл успешно импортирован в список");
+                Console.WriteLine("Данные успешно импортированы в список");
                 return jsonList;
             }
             catch (Exception e)
