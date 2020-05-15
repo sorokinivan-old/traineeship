@@ -11,6 +11,11 @@ using System.Text.Json;
 using JSONImporter.Models;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Confluent.Kafka;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace JSONImporter
 {
@@ -30,7 +35,7 @@ namespace JSONImporter
             {
                 while (true)
                 {
-                    Console.WriteLine("1 - Создать JSON файл, 2 - импортировать JSON файл, 3 - провести измерение производительности, 4 - импорт в БД");
+                    Console.WriteLine("1 - Создать JSON файл, 2 - импортировать JSON файл, 3 - провести измерение производительности, 4 - импорт в БД, 5 - добавить сообщение в Kafka, 6 - начать получать сообщения из Kafka");
                     var a = Convert.ToInt32(Console.ReadLine());
                     switch (a)
                     {
@@ -50,6 +55,12 @@ namespace JSONImporter
                         case 4:
                             method.SaveInDB();
                             break;
+                        case 5:
+                            method.Producer();
+                            break;
+                        case 6:
+                            method.Consumer();
+                            break;
                     }
                 }
             }
@@ -61,6 +72,67 @@ namespace JSONImporter
 
         }
 
+        public async Task Producer()
+        {
+            var config = new ProducerConfig { BootstrapServers = "localhost:9092" };
+            jsonList = method.ImportJson();
+            using (var p = new ProducerBuilder<Null, string>(config).Build())
+            {
+                try
+                {
+                        var dr = await p.ProduceAsync("test-topic", new Message<Null, string> { Value = "Hello world" });
+                        Console.WriteLine($"Отправлено '{dr.Value}' в '{dr.TopicPartitionOffset}'");
+                }
+                catch (ProduceException<Null, string> e)
+                {
+                    Console.WriteLine($"Отправка провалена: {e.Error.Reason}");
+                    logger.Error("При отправке сообщения вылетело исключение " + e);
+                }
+            }
+        }
+
+        public void Consumer()
+        {
+            var conf = new ConsumerConfig
+            {
+                GroupId = "test-consumer-group",
+                BootstrapServers = "localhost:9092",
+                AutoOffsetReset = AutoOffsetReset.Earliest
+            };
+
+            using (var c = new ConsumerBuilder<Ignore, string>(conf).Build())
+            {
+                c.Subscribe("test-topic");
+
+                CancellationTokenSource cts = new CancellationTokenSource();
+                Console.CancelKeyPress += (_, e) => {
+                    e.Cancel = true;
+                    cts.Cancel();
+                };
+
+                try
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                            var cr = c.Consume(cts.Token);
+                            Console.WriteLine($"Получено сообщение '{cr.Value}' из: '{cr.TopicPartitionOffset}'.");
+                        }
+                        catch (ConsumeException e)
+                        {
+                            Console.WriteLine($"При получении сообщений произошла ошибка: {e.Error.Reason}");
+                            logger.Error("При получении сообщений вылетело исключение " + e);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    c.Close();
+                }
+            }
+        }
+
         public void SaveInDB()
         {
             try
@@ -70,10 +142,12 @@ namespace JSONImporter
                 var players = new List<int>();
                 var teams = new TeamsDBModel();
                 var teamsList = new List<int>();
+                
                 foreach (var list in jsonList)
                 {
                     foreach (var inList in list.teams)
                     {
+
                         db.Coach.Add(inList.coach);
 
                         db.Details.Add(inList.detail);
