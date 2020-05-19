@@ -16,6 +16,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Confluent.Kafka;
 using System.Threading.Tasks;
 using System.Threading;
+using ProtoBuf;
 
 namespace JSONImporter
 {
@@ -76,12 +77,19 @@ namespace JSONImporter
         {
             var config = new ProducerConfig { BootstrapServers = "localhost:9092" };
             jsonList = method.ImportJson();
-            using (var p = new ProducerBuilder<Null, string>(config).Build())
+            using (var p = new ProducerBuilder<Null, Byte[]>(config).Build())
             {
                 try
                 {
-                        var dr = await p.ProduceAsync("test-topic", new Message<Null, string> { Value = "Hello world" });
-                        Console.WriteLine($"Отправлено '{dr.Value}' в '{dr.TopicPartitionOffset}'");
+                    foreach(var j in jsonList)
+                    {
+                            byte[] message = Team.ProtoSerialize<Team>(j);
+                            var dr = await p.ProduceAsync("test-topic2", new Message<Null, Byte[]> { Value = message });
+                            Console.WriteLine($"Отправлено '{dr.Value}' в '{dr.TopicPartitionOffset}'");
+                            break;
+                        
+                    }
+                        
                 }
                 catch (ProduceException<Null, string> e)
                 {
@@ -91,18 +99,19 @@ namespace JSONImporter
             }
         }
 
+
         public void Consumer()
         {
             var conf = new ConsumerConfig
             {
-                GroupId = "test-consumer-group",
+                GroupId = "test-consumer-group2",
                 BootstrapServers = "localhost:9092",
                 AutoOffsetReset = AutoOffsetReset.Earliest
             };
 
-            using (var c = new ConsumerBuilder<Ignore, string>(conf).Build())
+            using (var c = new ConsumerBuilder<Ignore, byte[]>(conf).Build())
             {
-                c.Subscribe("test-topic");
+                c.Subscribe("test-topic2");
 
                 CancellationTokenSource cts = new CancellationTokenSource();
                 Console.CancelKeyPress += (_, e) => {
@@ -116,13 +125,19 @@ namespace JSONImporter
                     {
                         try
                         {
-                            var cr = c.Consume(cts.Token);
-                            Console.WriteLine($"Получено сообщение '{cr.Value}' из: '{cr.TopicPartitionOffset}'.");
+                            var topic = c.Consume(cts.Token).TopicPartitionOffset;
+                            var message = c.Consume(cts.Token).Message.Value;
+                            Team crd = Team.ProtoDeserialize<Team>(message);
+                            foreach (var t in crd.teams)
+                            {
+                                Console.WriteLine($"Получено сообщение '{t.teamNumber}' из: '{topic}'.");
+                                break;
+                            }
+
                         }
                         catch (ConsumeException e)
                         {
-                            Console.WriteLine($"При получении сообщений произошла ошибка: {e.Error.Reason}");
-                            logger.Error("При получении сообщений вылетело исключение " + e);
+                            Console.WriteLine($"Error occured: {e.Error.Reason}");
                         }
                     }
                 }
