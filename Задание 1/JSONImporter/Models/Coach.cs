@@ -14,6 +14,7 @@ namespace JSONImporter
     {
         [Key]
         [ProtoMember(1)]
+        [ForeignKey("coach")]
         public int personId { get; set; }
         [ProtoMember(2)]
         public string familyName { get; set; }

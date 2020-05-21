@@ -17,6 +17,7 @@ using Confluent.Kafka;
 using System.Threading.Tasks;
 using System.Threading;
 using ProtoBuf;
+using Z.BulkOperations;
 
 namespace JSONImporter
 {
@@ -36,7 +37,7 @@ namespace JSONImporter
             {
                 while (true)
                 {
-                    Console.WriteLine("1 - Создать JSON файл, 2 - импортировать JSON файл, 3 - провести измерение производительности, 4 - импорт в БД, 5 - добавить сообщение в Kafka, 6 - начать получать сообщения из Kafka");
+                    Console.WriteLine("1 - Создать JSON файл, 2 - импортировать JSON файл, 3 - провести измерение производительности, 4 - импорт в БД, 5 - добавить сообщение в Kafka, 6 - начать получать сообщения из Kafka, 7 - выполнить BulkInsert в БД");
                     var a = Convert.ToInt32(Console.ReadLine());
                     switch (a)
                     {
@@ -62,6 +63,9 @@ namespace JSONImporter
                         case 6:
                             method.Consumer();
                             break;
+                        case 7:
+                            method.BulkInsertInDB();
+                            break;
                     }
                 }
             }
@@ -81,15 +85,15 @@ namespace JSONImporter
             {
                 try
                 {
-                    foreach(var j in jsonList)
+                    foreach (var j in jsonList)
                     {
-                            byte[] message = Team.ProtoSerialize<Team>(j);
-                            var dr = await p.ProduceAsync("test-topic2", new Message<Null, Byte[]> { Value = message });
-                            Console.WriteLine($"Отправлено '{dr.Value}' в '{dr.TopicPartitionOffset}'");
-                            break;
-                        
+                        byte[] message = Team.ProtoSerialize<Team>(j);
+                        var dr = await p.ProduceAsync("test-topic2", new Message<Null, Byte[]> { Value = message });
+                        Console.WriteLine($"Отправлено '{dr.Value}' в '{dr.TopicPartitionOffset}'");
+                        break;
+
                     }
-                        
+
                 }
                 catch (ProduceException<Null, string> e)
                 {
@@ -114,7 +118,8 @@ namespace JSONImporter
                 c.Subscribe("test-topic2");
 
                 CancellationTokenSource cts = new CancellationTokenSource();
-                Console.CancelKeyPress += (_, e) => {
+                Console.CancelKeyPress += (_, e) =>
+                {
                     e.Cancel = true;
                     cts.Cancel();
                 };
@@ -148,6 +153,58 @@ namespace JSONImporter
             }
         }
 
+        public void BulkInsertInDB()
+        {
+            try
+            {
+                DBContext db = new DBContext();
+                jsonList = method.ImportJson();
+                var players = new List<int>();
+                var teams = new List<TeamsDBModel>();
+                var team = new List<TeamDBModel>();
+                var teamsList = new List<int>();
+
+                foreach (var list in jsonList)
+                {
+                    foreach (var inList in list.teams)
+                    {
+
+                        db.BulkInsert(new List<Coach>() { inList.coach });
+                        db.BulkInsert(new List<Detail>() { inList.detail });
+                        db.BulkInsert(inList.players);
+                        foreach (var player in inList.players)
+                        {
+                            players.Add(player.personId);
+                        }
+                        teams.Add(new TeamsDBModel
+                        {
+                            teamNumber = inList.teamNumber,
+                            detail = inList.detail.detailId,
+                            players = players.ToArray(),
+                            coach = inList.coach.personId
+                        });
+                        teamsList.Add(inList.teamNumber);
+                        db.BulkInsert(teams);
+
+                    }
+                    team.Add( new TeamDBModel
+                    {
+                        messageId = list.messageId,
+                        teams = teamsList.ToArray()
+                    });
+                    db.BulkInsert(team);
+                    db.BulkSaveChanges();
+                }
+                
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                logger.Error("При импорте в БД вылетело исключение " + e);
+            }
+
+        }
+
         public void SaveInDB()
         {
             try
@@ -157,7 +214,7 @@ namespace JSONImporter
                 var players = new List<int>();
                 var teams = new TeamsDBModel();
                 var teamsList = new List<int>();
-                
+
                 foreach (var list in jsonList)
                 {
                     foreach (var inList in list.teams)
@@ -198,7 +255,7 @@ namespace JSONImporter
                 Console.WriteLine(e);
                 logger.Error("При импорте в БД вылетело исключение " + e);
             }
-            
+
         }
 
         [Benchmark]
