@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ASPNETProject.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -13,6 +15,7 @@ namespace ASPNETProject
 {
     public class Startup
     {
+        static ConfigurationBuilder configurationBuilder = new ConfigurationBuilder();
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
@@ -24,6 +27,13 @@ namespace ASPNETProject
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllersWithViews();
+            configurationBuilder.AddJsonFile("appsettings.json");
+            IConfigurationRoot configurationRoot = configurationBuilder.Build();
+            string conn = configurationRoot["connString"];
+            services.AddDbContext<DBContext>(options =>
+            {
+                options.UseNpgsql(conn);
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

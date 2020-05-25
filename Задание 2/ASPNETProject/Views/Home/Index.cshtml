@@ -6,15 +6,15 @@
     var check = ViewBag.CheckConnection;
 }
 
-<div class="text-center">
-    @{ 
-        if (check)
-        {
-            <p>База данных доступна</p>
+    <div class="text-center">
+        @{
+            if (check)
+            {
+                <p>База данных доступна</p>
+            }
+            else
+            {
+                <p>База данных недоступна</p>
+            }
         }
-        else
-        {
-            <p>База данных недоступна</p>
-        }
-    }
-</div>
+    </div>

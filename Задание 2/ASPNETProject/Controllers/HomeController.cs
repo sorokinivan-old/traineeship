@@ -7,12 +7,13 @@ namespace ASPNETProject.Controllers
 {
     public class HomeController : Controller
     {
-        private DBContext db = new DBContext();
+        private readonly DBContext db;
         private readonly ILogger<HomeController> _logger;
 
-        public HomeController(ILogger<HomeController> logger)
+        public HomeController(ILogger<HomeController> logger, DBContext context)
         {
             _logger = logger;
+            db = context;
         }
 
         public IActionResult Index()
@@ -21,15 +22,5 @@ namespace ASPNETProject.Controllers
             return View();
         }
 
-        public IActionResult Privacy()
-        {
-            return View();
-        }
-
-        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
-        {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-        }
     }
 }
